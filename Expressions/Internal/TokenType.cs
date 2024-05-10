@@ -7,10 +7,9 @@
         Error,
 
         LeftParen, RightParen,
-        Plus, Minus, Star, Slash,
-        Percent, Pipe, Ampersand,
-        Bang, Dollar,
-        Equal, BangEqual,
+        Plus, Minus, Star, Slash, Caret, Percent,
+        Pipe, Ampersand, Dollar,
+        Bang, Equal, BangEqual,
         Greater, GreaterEqual,
         Less, LessEqual,
         Comma,

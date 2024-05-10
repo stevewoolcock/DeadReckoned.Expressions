@@ -63,12 +63,12 @@ namespace DeadReckoned.Expressions
             }
         }
 
-        public EvaluateResult Evaluate(ReadOnlyMemory<char> expression, ExpressionContext context = null, bool throwOnFailure = true)
+        public EvaluateResult Evaluate(string expression, ExpressionContext context = null, bool throwOnFailure = true)
         {
             Expression expr;
             try
             {
-                expr = Compile(expression, throwOnFailure);
+                expr = Compile(expression, true);
             }
             catch (Exception ex)
             {
@@ -81,12 +81,12 @@ namespace DeadReckoned.Expressions
             return Evaluate(expr, context, throwOnFailure);
         }
 
-        public EvaluateResult Evaluate(string expression, ExpressionContext context = null, bool throwOnFailure = true)
+        public EvaluateResult Evaluate(ReadOnlyMemory<char> expression, ExpressionContext context = null, bool throwOnFailure = true)
         {
             Expression expr;
             try
             {
-                expr = Compile(expression, true);
+                expr = Compile(expression, throwOnFailure);
             }
             catch (Exception ex)
             {

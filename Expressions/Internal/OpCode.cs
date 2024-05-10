@@ -8,7 +8,8 @@
         Sub,
         Mul,
         Div,
-        Mod,
+        Xor,
+        Rem,
         Neg,
 
         Equal,

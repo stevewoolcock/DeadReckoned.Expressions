@@ -49,6 +49,7 @@ namespace DeadReckoned.Expressions.Internal
                 case '-': return MakeToken(TokenType.Minus);
                 case '*': return MakeToken(TokenType.Star);
                 case '/': return MakeToken(TokenType.Slash);
+                case '^': return MakeToken(TokenType.Caret);
                 case '%': return MakeToken(TokenType.Percent);
                 case '$': return MakeToken(TokenType.Dollar);
                 case '|': return MakeToken(TokenType.Pipe);

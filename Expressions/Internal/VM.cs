@@ -41,7 +41,7 @@ namespace DeadReckoned.Expressions.Internal
             public static readonly BinaryArithmeticOps Sub = new((a, b) => a - b, (a, b) => a - b);
             public static readonly BinaryArithmeticOps Mul = new((a, b) => a * b, (a, b) => a * b);
             public static readonly BinaryArithmeticOps Div = new((a, b) => a / b, (a, b) => a / b);
-            public static readonly BinaryArithmeticOps Mod = new((a, b) => a % b, (a, b) => a % b);
+            public static readonly BinaryArithmeticOps Rem = new((a, b) => a % b, (a, b) => a % b);
         }
 
         private readonly struct BinaryLogicalOps
@@ -64,13 +64,28 @@ namespace DeadReckoned.Expressions.Internal
 
         private FastStack<Value> m_Stack;
 
+        private void InitializeStack(ExpressionEngineConfig config)
+        {
+            if (m_Stack == null)
+            {
+                int initSize = config.InitialStackSize;
+                if (initSize < 0)
+                {
+                    initSize = 32;
+                }
+
+                m_Stack = new FastStack<Value>(initSize, config.MaxStackSize);
+            }
+
+            m_Stack.Clear();
+        }
+
         internal Value Evaluate(ExpressionEngine engine, Expression expr, ExpressionContext context)
         {
             if (expr.m_ByteCode.Length == 0)
                 return Value.Null;
 
-            m_Stack ??= new FastStack<Value>(32);
-            m_Stack.Clear();
+            InitializeStack(engine.m_Config);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             static byte ReadI8(byte* code, ref int ip) => code[ip++];
@@ -226,10 +241,18 @@ namespace DeadReckoned.Expressions.Internal
                             }
                             break;
 
-                        case OpCode.Mod:
+                        case OpCode.Xor:
                             {
                                 (Value a, Value b) = m_Stack.Pop2Reverse();
-                                Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Mod);
+                                Value v = a.ToBool() ^ b.ToBool();
+                                m_Stack.Push(v);
+                            }
+                            break;
+
+                        case OpCode.Rem:
+                            {
+                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Rem);
                                 m_Stack.Push(v);
                             }
                             break;

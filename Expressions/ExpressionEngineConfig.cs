@@ -48,5 +48,19 @@ namespace DeadReckoned.Expressions
         /// are not affected.
         /// </summary>
         public HashSet<string> DisableFunctions { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// The initial size of the evaluation stack. This is the number of <see cref="Value"/> instances that can be placed onto the evaluation stack,
+        /// before it must be grown. The stack will double in size each time it grows.<para/>
+        /// The default value is <c>32</c>.
+        /// </summary>
+        public int InitialStackSize { get; set; } = 32;
+
+        /// <summary>
+        /// The maximum size of the evaluation stack. A <see cref="ExpressionRuntimeException"/> is thrown if the stack is exhausted.
+        /// A value of zero places no explicit upper-limit on the stack size.<para/>
+        /// The default value is <c>0</c>.
+        /// </summary>
+        public int MaxStackSize { get; set; } = 0;
     }
 }

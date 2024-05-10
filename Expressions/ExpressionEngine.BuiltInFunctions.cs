@@ -77,6 +77,37 @@ namespace DeadReckoned.Expressions
                 }),
 
 
+                new("IS_BOOL", call =>
+                {
+                    call.Args.EnsureCount(1);
+                    return call.Args[0].IsBool;
+                }),
+
+                new("IS_INTEGER", call =>
+                {
+                    call.Args.EnsureCount(1);
+                    return call.Args[0].IsInteger;
+                }),
+
+                new("IS_DECIMAL", call =>
+                {
+                    call.Args.EnsureCount(1);
+                    return call.Args[0].IsDecimal;
+                }),
+
+                new("IS_NUMBER", call =>
+                {
+                    call.Args.EnsureCount(1);
+                    return call.Args[0].IsNumber;
+                }),
+
+                new("IS_NULL", call =>
+                {
+                    call.Args.EnsureCount(1);
+                    return call.Args[0].IsNumber;
+                }),
+
+
                 // Logic
                 new("AND", call =>
                 {

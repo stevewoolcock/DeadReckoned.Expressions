@@ -39,7 +39,7 @@ namespace DeadReckoned.Expressions
             context.Params["FOO"] = 5;
             context.Params["BAR"] = 2;
 
-            string exprSource = "$TAU";
+            string exprSource = "IF(MUL(1, 2) = 2, true, SUM(2, 2) = 4)";
 
             try
             {

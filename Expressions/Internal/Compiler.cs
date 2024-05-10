@@ -59,6 +59,7 @@ namespace DeadReckoned.Expressions.Internal
             _parseRules[(int)TokenType.Slash]        /**/ = new ParseRule(null,             /**/ ParseBinary,  /**/ Precedence.Factor);
             _parseRules[(int)TokenType.Percent]      /**/ = new ParseRule(null,             /**/ ParseBinary,  /**/ Precedence.Factor);
             _parseRules[(int)TokenType.Star]         /**/ = new ParseRule(null,             /**/ ParseBinary,  /**/ Precedence.Factor);
+            _parseRules[(int)TokenType.Caret]        /**/ = new ParseRule(null,             /**/ ParseBinary,  /**/ Precedence.Factor);
             _parseRules[(int)TokenType.Dollar]       /**/ = new ParseRule(ParseParameter,   /**/ null,         /**/ Precedence.None);
             _parseRules[(int)TokenType.Bang]         /**/ = new ParseRule(ParseUnary,       /**/ null,         /**/ Precedence.None);
             _parseRules[(int)TokenType.BangEqual]    /**/ = new ParseRule(null,             /**/ ParseBinary,  /**/ Precedence.Equality);
@@ -416,7 +417,8 @@ namespace DeadReckoned.Expressions.Internal
                 case TokenType.Minus:        /**/  Emit(OpCode.Sub); break;
                 case TokenType.Star:         /**/  Emit(OpCode.Mul); break;
                 case TokenType.Slash:        /**/  Emit(OpCode.Div); break;
-                case TokenType.Percent:      /**/  Emit(OpCode.Mod); break;
+                case TokenType.Caret:        /**/  Emit(OpCode.Xor); break;
+                case TokenType.Percent:      /**/  Emit(OpCode.Rem); break;
                 default:
                     ErrorAtCurrent("Unreachable");
                     return;

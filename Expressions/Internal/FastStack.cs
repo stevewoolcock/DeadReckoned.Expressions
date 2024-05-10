@@ -8,12 +8,14 @@ namespace DeadReckoned.Expressions.Internal
     {
         private T[] m_Items;
         private int m_Count;
+        private int m_MaxCapacity;
 
         public int Count => m_Count;
 
-        public FastStack(int capacity)
+        public FastStack(int initialCapacity, int maxCapacity = 0)
         {
-            m_Items = new T[capacity];
+            m_Items = new T[initialCapacity];
+            m_MaxCapacity = maxCapacity;
         }
 
         public ReadOnlySpan<T> AsSpan() => new(m_Items, 0, m_Count);
@@ -26,9 +28,20 @@ namespace DeadReckoned.Expressions.Internal
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Push(T item)
         {
-            if (m_Count >= m_Items.Length)
+            int size = m_Items.Length;
+            if (m_Count >= size)
             {
-                int newSize = m_Items.Length * 2;
+                if (m_MaxCapacity > 0 && size >= m_MaxCapacity)
+                {
+                    throw new ExpressionRuntimeException("Stack overflow");
+                }
+
+                int newSize = size > 0 ? size * 2 : 8;
+                if (newSize > m_MaxCapacity)
+                {
+                    newSize = m_MaxCapacity;
+                }
+
                 Array.Resize(ref m_Items, newSize);
             }
 
