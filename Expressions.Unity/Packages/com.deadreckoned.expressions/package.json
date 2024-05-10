@@ -1,6 +1,6 @@
 {
   "name": "com.deadreckoned.expressions",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "displayName": "DeadReckoned.Expressions",
   "description": "A fast, lightweight expression evaluation engine for C#. Compatible with Unity.",
   "unity": "2021.2",
