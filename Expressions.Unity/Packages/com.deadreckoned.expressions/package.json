@@ -1,0 +1,19 @@
+{
+  "name": "com.deadreckoned.expressions",
+  "version": "1.0.1",
+  "displayName": "DeadReckoned.Expressions",
+  "description": "A fast, lightweight expression evaluation engine for C#. Compatible with Unity.",
+  "unity": "2021.2",
+  "documentationUrl": "https://github.com/stevewoolcock/DeadReckoned.Expressions",
+  "licensesUrl": "https://github.com/stevewoolcock/DeadReckoned.Expressions/blob/main/LICENSE",
+  "keywords": [
+    "expression",
+    "utility",
+    "c#"
+  ],
+  "author": {
+    "name": "Dead Reckoned",
+    "email": "info@deadreckoned.com",
+    "url": "https://www.deadreckoned.com"
+  }
+}
