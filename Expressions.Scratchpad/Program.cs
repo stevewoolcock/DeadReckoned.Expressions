@@ -39,14 +39,16 @@ namespace DeadReckoned.Expressions
             context.Params["FOO"] = 5;
             context.Params["BAR"] = 2;
 
-            string exprSource = "IF(MUL(1, 2) = 2, true, SUM(2, 2) = 4)";
+            //string exprSource = "IF(MUL(1, 2) = 2, true, SUM(2, 2) = 4)";
+            string exprSource = "12 + (56 / 0.5) * 5 + (100 * 0.25)";
 
             try
             {
                 // Warm up
+                for (int i = 0; i < 4; i++)
                 {
-                    //(Expression expr, TimeSpan compTime) = Compile(engine, exprSource);
-                    //(Value result, TimeSpan evalTime) = Evaluate(engine, expr, context);
+                    (Expression expr, TimeSpan compTime) = Compile(engine, exprSource);
+                    (Value result, TimeSpan evalTime) = Evaluate(engine, expr, context);
                 }
 
                 {

@@ -88,33 +88,33 @@ namespace DeadReckoned.Expressions.Internal
             InitializeStack(engine.m_Config);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static byte ReadI8(byte* code, ref int ip) => code[ip++];
+            static byte ReadI8(ref byte* ip) => *ip++;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static short ReadI16(byte* code, ref int ip) => (short)((code[ip++] << 8) | code[ip++]);
+            static short ReadI16(ref byte* ip) => (short)((*ip++ << 8) | *ip++);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static int ReadI32(byte* code, ref int ip) => (code[ip++] << 24) | (code[ip++] << 16) | (code[ip++] << 8) | code[ip++];
+            static int ReadI32(ref byte* ip) => (*ip++ << 24) | (*ip++ << 16) | (*ip++ << 8) | *ip++;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static long ReadI64(byte* code, ref int ip)
+            static long ReadI64(ref byte* ip)
             {
-                uint hi = (uint)((code[ip++] << 24) | (code[ip++] << 16) | (code[ip++] << 8) | code[ip++]);
-                uint lo = (uint)((code[ip++] << 24) | (code[ip++] << 16) | (code[ip++] << 8) | code[ip++]);
+                uint hi = (uint)((*ip++ << 24) | (*ip++ << 16) | (*ip++ << 8) | *ip++);
+                uint lo = (uint)((*ip++ << 24) | (*ip++ << 16) | (*ip++ << 8) | *ip++);
                 return (long)((ulong)hi) << 32 | lo;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static float ReadF32(byte* code, ref int ip)
+            static float ReadF32(ref byte* ip)
             {
-                int i = ReadI32(code, ref ip);
+                int i = ReadI32(ref ip);
                 return *(float*)&i;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static double ReadF64(byte* code, ref int ip)
+            static double ReadF64(ref byte* ip)
             {
-                long tmp = ReadI64(code, ref ip);
+                long tmp = ReadI64(ref ip);
                 return *((double*)&tmp);
             }
 
@@ -123,12 +123,12 @@ namespace DeadReckoned.Expressions.Internal
             {
                 if (a.IsInteger)
                 {
-                    return ops.Integer(a.Integer);
+                    return ops.Integer(a.m_Integer);
                 }
 
                 if (a.IsDecimal)
                 {
-                    return ops.Decimal(a.Decimal);
+                    return ops.Decimal(a.m_Decimal);
                 }
 
                 throw new ExpressionRuntimeException($"Unary operation is not valid for value of type '{a.m_Type}'");
@@ -141,24 +141,24 @@ namespace DeadReckoned.Expressions.Internal
                 {
                     if (b.IsInteger)
                     {
-                        return ops.Integer(a.Integer, b.Integer);
+                        return ops.Integer(a.m_Integer, b.m_Integer);
                     }
 
                     if (b.IsDecimal)
                     {
-                        return ops.Decimal(a.Integer, b.Decimal);
+                        return ops.Decimal(a.m_Integer, b.m_Decimal);
                     }
                 }
                 else if (a.IsDecimal)
                 {
                     if (b.IsInteger)
                     {
-                        return ops.Decimal(a.Decimal, b.Integer);
+                        return ops.Decimal(a.m_Decimal, b.m_Integer);
                     }
 
                     if (b.IsDecimal)
                     {
-                        return ops.Decimal(a.Decimal, b.Decimal);
+                        return ops.Decimal(a.m_Decimal, b.m_Decimal);
                     }
                 }
 
@@ -172,239 +172,253 @@ namespace DeadReckoned.Expressions.Internal
                 {
                     if (b.IsInteger)
                     {
-                        return ops.Integer(a.Integer, b.Integer);
+                        return ops.Integer(a.m_Integer, b.m_Integer);
                     }
 
                     if (b.IsDecimal)
                     {
-                        return ops.Decimal(a.Integer, b.Decimal);
+                        return ops.Decimal(a.m_Integer, b.m_Decimal);
                     }
                 }
                 else if (a.IsDecimal)
                 {
                     if (b.IsInteger)
                     {
-                        return ops.Decimal(a.Decimal, b.Integer);
+                        return ops.Decimal(a.m_Decimal, b.m_Integer);
                     }
 
                     if (b.IsDecimal)
                     {
-                        return ops.Decimal(a.Decimal, b.Decimal);
+                        return ops.Decimal(a.m_Decimal, b.m_Decimal);
                     }
                 }
 
                 throw new ExpressionRuntimeException($"Binary operation is not valid for values of type '{a.m_Type}' and '{b.m_Type}'");
             }
 
-            int ip = 0;
+            FastStack<Value> stack = m_Stack;
             fixed (byte* code = expr.m_ByteCode)
             {
-                while (true)
+                byte* ip = code;
+                byte* end = code + expr.m_ByteCode.Length;
+                while (ip < end)
                 {
-                    OpCode opCode = (OpCode)code[ip++];
+                    OpCode opCode = *(OpCode*)ip++;
                     switch (opCode)
                     {
                         case OpCode.Pop:
-                            m_Stack.Pop();
+                            stack.Discard(1);
                             break;
 
 
                         case OpCode.Add:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Add);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Sub:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Sub);
-                                m_Stack.Push(v);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.Mul:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Mul);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Div:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Div);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Xor:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = a.ToBool() ^ b.ToBool();
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Rem:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryArithmetic(in a, in b, in BinaryArithmeticOps.Rem);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Neg:
                             {
-                                Value a = m_Stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = UnaryArithmetric(in a, in UnaryArithmeticOps.Neg);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
 
                         case OpCode.Equal:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
-                                m_Stack.Push(a == b);
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
+                                stack.Push(a == b);
                             }
                             break;
 
                         case OpCode.NotEqual:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
-                                m_Stack.Push(a != b);
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
+                                stack.Push(a != b);
                             }
                             break;
 
                         case OpCode.GreaterEq:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryLogical(in a, in b, in BinaryLogicalOps.GreaterEq);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.LessEq:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryLogical(in a, in b, in BinaryLogicalOps.LessEq);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Less:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryLogical(in a, in b, in BinaryLogicalOps.Less);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Greater:
                             {
-                                (Value a, Value b) = m_Stack.Pop2Reverse();
+                                ref readonly Value b = ref stack.Pop();
+                                ref readonly Value a = ref stack.Pop();
                                 Value v = BinaryLogical(in a, in b, in BinaryLogicalOps.Greater);
-                                m_Stack.Push(v);
+                                stack.Push(in v);
                             }
                             break;
 
                         case OpCode.Not:
                             {
-                                Value v = m_Stack.Pop();
-                                m_Stack.Push(IsFalsey(v));
+                                ref readonly Value v = ref stack.Pop();
+                                stack.Push(IsFalsey(in v));
                             }
                             break;
 
 
                         case OpCode.LdNull:
-                            m_Stack.Push(Value.Null);
+                            stack.Push(Value.Null);
                             break;
 
                         case OpCode.LdTrue:
-                            m_Stack.Push(true);
+                            stack.Push(true);
                             break;
 
                         case OpCode.LdFalse:
-                            m_Stack.Push(false);
+                            stack.Push(false);
                             break;
 
                         case OpCode.LdI8:
                             {
-                                var v = ReadI8(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadI8(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdI16:
                             {
-                                var v = ReadI16(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadI16(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdI32:
                             {
-                                var v = ReadI32(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadI32(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdI64:
                             {
-                                var v = ReadI64(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadI64(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdF32:
                             {
-                                var v = ReadF32(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadF32(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdF64:
                             {
-                                var v = ReadF64(code, ref ip);
-                                m_Stack.Push(v);
+                                var v = ReadF64(ref ip);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.LdStr:
                             {
-                                int index = ReadI32(code, ref ip);
-                                m_Stack.Push(index);
+                                var index = ReadI32(ref ip);
+                                stack.Push(index);
                             }
                             break;
 
                         case OpCode.LdParam:
                             {
-                                int index = ReadI32(code, ref ip);
-                                string name = expr.m_Strings[index];
+                                var index = ReadI32(ref ip);
+                                var name = expr.m_Strings[index];
 
                                 // Context takes precedence (local)
                                 // Followed by engine (global)
-                                if (!context.m_Params.TryGet(name, out Value value))
+                                if (!context.m_Params.TryGet(name, out Value v))
                                 {
-                                    if (!engine.m_Params.TryGet(name, out value))
+                                    if (!engine.m_Params.TryGet(name, out v))
                                     {
                                         throw new ExpressionRuntimeException($"Parameter '{name}' is not defined");
                                     }
                                 }
 
-                                m_Stack.Push(value);
+                                stack.Push(in v);
                             }
                             break;
 
 
                         case OpCode.JumpIfFalse:
                             {
-                                ushort offset = (ushort)ReadI16(code, ref ip);
-                                if (IsFalsey(m_Stack.Peek()))
+                                var offset = (ushort)ReadI16(ref ip);
+                                if (IsFalsey(in stack.Peek()))
                                 {
                                     ip += offset;
                                 }
@@ -413,8 +427,8 @@ namespace DeadReckoned.Expressions.Internal
 
                         case OpCode.JumpIfTrue:
                             {
-                                ushort offset = (ushort)ReadI16(code, ref ip);
-                                if (IsTruthy(m_Stack.Peek()))
+                                var offset = (ushort)ReadI16(ref ip);
+                                if (IsTruthy(in stack.Peek()))
                                 {
                                     ip += offset;
                                 }
@@ -423,36 +437,40 @@ namespace DeadReckoned.Expressions.Internal
 
                         case OpCode.Call:
                             {
-                                // Number of arguments passed
-                                byte argCount = ReadI8(code, ref ip);
-                                
-                                int funcId = ReadI32(code, ref ip); 
-                                if (!engine.TryGetFunction(funcId, out FunctionInfo fnInfo))
+                                var argCount = ReadI8(ref ip);
+                                var funcId = ReadI32(ref ip); 
+                                if (!engine.TryGetFunction(funcId, out FunctionInfo funcInfo))
                                 {
                                     throw new ExpressionRuntimeException($"Function not defined");
                                 }
 
                                 // Arguments are already on the stack, a read-only view is passed to the function
                                 // The stack will not be modified while the function is executing
-                                ReadOnlyMemory<Value> args = m_Stack.PeekMemory(argCount);
+                                ReadOnlyMemory<Value> args = stack.PeekMemory(argCount);
                                 FunctionCall call = new(engine, expr, context, args);
-                                Value retVal = fnInfo.Function(call);
+                                Value v = funcInfo.Function(call);
 
                                 // Arguments are discarded and function return value pushed onto the stack
-                                m_Stack.Discard(argCount);
-                                m_Stack.Push(retVal);
+                                stack.Discard(argCount);
+                                stack.Push(v);
                             }
                             break;
 
                         case OpCode.Return:
-                            {
-                                Value v = m_Stack.Count > 0 ? m_Stack.Pop() : Value.Null;
-                                System.Diagnostics.Debug.Assert(m_Stack.Count == 0, "Stack count is > 0");
-                                return v;
-                            }
+                            ip = end;
+                            break;
                     }
                 }
             }
+
+            // Value remaining on the stack is returned
+            Value retval = stack.Count > 0 ? stack.PopCopy() : Value.Null;
+
+            // The stack should now be empty
+            // If there's anything left on it, something has gone wrong
+            System.Diagnostics.Debug.Assert(stack.Count == 0, "Stack count is > 0");
+
+            return retval;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

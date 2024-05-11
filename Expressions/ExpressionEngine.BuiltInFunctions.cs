@@ -13,8 +13,8 @@ namespace DeadReckoned.Expressions
             {
                 return value.m_Type switch
                 {
-                    ValueType.Integer => integerOp(value.Integer),
-                    ValueType.Decimal => decimalOp(value.Decimal),
+                    ValueType.Integer => integerOp(value.m_Integer),
+                    ValueType.Decimal => decimalOp(value.m_Decimal),
                     _ => throw new ExpressionRuntimeException($"Argument type '{value.m_Type}' is not valid"),
                 };
             }
@@ -146,7 +146,7 @@ namespace DeadReckoned.Expressions
                 new("ISNAN", call =>
                 {
                     call.Args.EnsureCount(1);
-                    return double.IsNaN(call.Args[0].Decimal);
+                    return double.IsNaN(call.Args[0].m_Decimal);
                 }),
 
 

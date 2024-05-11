@@ -104,8 +104,6 @@ namespace DeadReckoned.Expressions.Internal
                 ParseExpression();
             }
 
-            Emit(OpCode.Return);
-
             return new Expression(m_ByteCode.ToArray(), m_Strings.ToArray());
         }
 
