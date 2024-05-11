@@ -43,8 +43,9 @@ namespace DeadReckoned.Expressions.Internal
         private readonly List<byte> m_ByteCode = new();
         private readonly List<string> m_Strings = new();
         private readonly Dictionary<string, int> m_StringsLookup = new();
-        private readonly Parser m_Parser = new();
         private readonly StringBuilder m_StringBuilder = new(0);
+        private readonly Parser m_Parser = new();
+        private int m_Depth;
         private Token m_Previous;
         private Token m_Current;
         private ReadOnlyMemory<char> m_Source;
@@ -84,9 +85,16 @@ namespace DeadReckoned.Expressions.Internal
         {
             m_Engine = engine;
             m_Source = source;
+
+            // Reset state
+            m_Depth = 0;
+            m_Previous = default;
+            m_Current = default;
             m_ByteCode.Clear();
             m_Strings.Clear();
             m_StringsLookup.Clear();
+            m_StringBuilder.Clear();
+
             m_Parser.Init(source);
 
             Advance();
@@ -103,7 +111,7 @@ namespace DeadReckoned.Expressions.Internal
 
         #region Errors
 
-        private void Error(string message, int errorCursorOffset = -1) => ErrorAt(m_Previous, message, errorCursorOffset);
+        private void Error(string message, int errorCursorOffset = 0) => ErrorAt(m_Previous, message, errorCursorOffset);
 
         private void ErrorAt(in Token token, string message, int errorCursorOffset = 0)
         {
@@ -140,7 +148,7 @@ namespace DeadReckoned.Expressions.Internal
             throw new ExpressionCompileException(m_StringBuilder.ToString());
         }
 
-        private void ErrorAtCurrent(string message, int errorCursorOffset = -1) => ErrorAt(m_Current, message, errorCursorOffset);
+        private void ErrorAtCurrent(string message, int errorCursorOffset = 0) => ErrorAt(m_Current, message, errorCursorOffset);
 
         #endregion
 
@@ -184,6 +192,60 @@ namespace DeadReckoned.Expressions.Internal
             }
 
             return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void IncrementDepth()
+        {
+            m_Depth++;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void DecrementDepth()
+        {
+            m_Depth--;
+            System.Diagnostics.Debug.Assert(m_Depth >= 0);
+        }
+
+        private void ErrorIfOrphaned()
+        {
+            // The previous expression is considered "orphaned" if it is at the root of the
+            // expression, is not followed by an EOF token or a binary operator token.
+            // Orphaned expressions are invalid syntax, and would occur in an expression such as:
+            //
+            //  "TRUE 1234 + 5678"
+            //
+            // In the above, 'TRUE' would be considered orphaned and a syntax error.
+
+            if (m_Depth > 0)
+                return;
+
+            if (Check(TokenType.EOF) || Check(TokenType.Error))
+                return;
+
+            switch (m_Current.Type)
+            {
+                // Binary operators are OK, something is likely to follow...
+                case TokenType.Ampersand:
+                case TokenType.Pipe:
+                case TokenType.Plus:
+                case TokenType.Minus:
+                case TokenType.Star:
+                case TokenType.Slash:
+                case TokenType.Percent:
+                case TokenType.Equal:
+                case TokenType.BangEqual:
+                case TokenType.LessEqual:
+                case TokenType.GreaterEqual:
+                case TokenType.Less:
+                case TokenType.Greater:
+                case TokenType.Caret:
+                    return;
+
+                default:
+                    ErrorAtCurrent("Expected operator");
+                    return;
+            }
         }
 
         private ref ParseRule GetParseRule(TokenType tokenType) => ref _parseRules[(int)tokenType];
@@ -354,8 +416,13 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseGrouping()
         {
+            IncrementDepth();
+
             ParseExpression();
             Consume(TokenType.RightParen, "Expected ')' after expression");
+
+            DecrementDepth();
+            ErrorIfOrphaned();
         }
 
         private void ParseCall()
@@ -363,6 +430,7 @@ namespace DeadReckoned.Expressions.Internal
             int argCount = 0;
             if (!Check(TokenType.RightParen))
             {
+                IncrementDepth();
                 do
                 {
                     ParseExpression();
@@ -371,9 +439,12 @@ namespace DeadReckoned.Expressions.Internal
                     if (argCount > byte.MaxValue)
                     {
                         Error("Too many arguments supplied to function");
+                        return;
                     }
                 }
                 while (Match(TokenType.Comma));
+
+                DecrementDepth();
             }
 
             Consume(TokenType.RightParen, "Expected ')' after argument list");
@@ -385,7 +456,7 @@ namespace DeadReckoned.Expressions.Internal
         private void ParseUnary()
         {
             TokenType operatorType = m_Previous.Type;
-
+            IncrementDepth();
             ParsePrecedence(Precedence.Unary);
 
             switch (operatorType)
@@ -396,6 +467,7 @@ namespace DeadReckoned.Expressions.Internal
                     ErrorAtCurrent("Unreachable");
                     return;
             }
+            DecrementDepth();
         }
 
         private void ParseBinary()
@@ -403,6 +475,7 @@ namespace DeadReckoned.Expressions.Internal
             TokenType operatorType = m_Previous.Type;
             ref ParseRule rule = ref GetParseRule(operatorType);
 
+            IncrementDepth();
             ParsePrecedence(rule.Precedence + 1);
 
             switch (operatorType)
@@ -423,15 +496,22 @@ namespace DeadReckoned.Expressions.Internal
                     ErrorAtCurrent("Unreachable");
                     return;
             }
+            DecrementDepth();
         }
 
         private void ParseParameter()
         {
             Consume(TokenType.Identifier, "Expected identifier after '$'");
 
-            int index = GetOrAddString(in m_Previous, out _);
+            int index = GetOrAddString(in m_Previous, out string name);
             Emit(OpCode.LdParam);
             Emit(index);
+
+            if (Check(TokenType.LeftParen))
+            {
+                ErrorAtCurrent($"Parameter '{name}' is not callable");
+                return;
+            }
         }
 
         private void ParseIdentifier()
@@ -440,14 +520,13 @@ namespace DeadReckoned.Expressions.Internal
             string name = nameToken.ToString(m_Source);
 
             // If followed by a '(', this is a function call
-            // We can optimise this and avoid loading the LdStr op and
-            // just write the index directly to the byte code
+            // Functions must be known at compile time, so it is an error if it doesn't exist
             if (Match(TokenType.LeftParen))
             {
                 if (!m_Engine.TryGetFunction(name, out FunctionInfo fn))
                 {
-                    // Error reported at the beginning function name
                     ErrorAt(nameToken, $"'{name}' is not a function");
+                    return;
                 }
 
                 ParseCall();
@@ -460,6 +539,8 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseInteger()
         {
+            ErrorIfOrphaned();
+
             // Integers are always parsed as decimal types in decimal numeric mode
             if (m_Engine.m_Config.NumericMode == NumericMode.Decimal)
             {
@@ -479,6 +560,8 @@ namespace DeadReckoned.Expressions.Internal
         
         private void ParseDecimal32()
         {
+            ErrorIfOrphaned();
+
             ReadOnlySpan<char> span = m_Previous.Slice(m_Source);
             if (float.TryParse(span, out float value))
             {
@@ -499,6 +582,8 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseDecimal64()
         {
+            ErrorIfOrphaned();
+
             ReadOnlySpan<char> span = m_Previous.Slice(m_Source);
             if (double.TryParse(span, out double value))
             {
@@ -519,6 +604,8 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseString()
         {
+            ErrorIfOrphaned();
+
             ref Token token = ref m_Previous;
             ReadOnlySpan<char> span = m_Source.Slice(token.Start + 1, token.Length - 2).Span;
 
@@ -573,6 +660,8 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseLiteral()
         {
+            ErrorIfOrphaned();
+
             switch (m_Previous.Type)
             {
                 case TokenType.False:   /**/ Emit(OpCode.LdFalse); break;
