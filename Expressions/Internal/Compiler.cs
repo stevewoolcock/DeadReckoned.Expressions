@@ -38,16 +38,20 @@ namespace DeadReckoned.Expressions.Internal
             }
         }
 
+        [ThreadStatic]
+        private static Expression _transientExpression;
+
         private readonly ParseRule[] _parseRules = new ParseRule[(int)TokenType.MAX];
 
-        private readonly List<byte> m_ByteCode = new();
-        private readonly List<string> m_Strings = new();
+        private readonly FastAppendList<byte> m_ByteCode = new(32);
+        private readonly FastAppendList<string> m_Strings = new(8);
         private readonly Dictionary<string, int> m_StringsLookup = new();
         private readonly StringBuilder m_StringBuilder = new(0);
         private readonly Parser m_Parser = new();
         private int m_Depth;
-        private Token m_Previous;
         private Token m_Current;
+        private Token m_Previous;
+        private Token m_Previous2;
         private ReadOnlyMemory<char> m_Source;
         private ExpressionEngine m_Engine;
 
@@ -81,17 +85,18 @@ namespace DeadReckoned.Expressions.Internal
             _parseRules[(int)TokenType.NaN]          /**/ = new ParseRule(ParseLiteral,     /**/ null,         /**/ Precedence.None);
         }
 
-        public Expression Compile(ExpressionEngine engine, ReadOnlyMemory<char> source)
+        public Expression Compile(ExpressionEngine engine, ReadOnlyMemory<char> source, bool transient)
         {
             m_Engine = engine;
             m_Source = source;
 
             // Reset state
             m_Depth = 0;
-            m_Previous = default;
             m_Current = default;
-            m_ByteCode.Clear();
-            m_Strings.Clear();
+            m_Previous = default;
+            m_Previous2 = default;
+            m_ByteCode.Clear(clearBuffer: false);
+            m_Strings.Clear(clearBuffer: true);
             m_StringsLookup.Clear();
             m_StringBuilder.Clear();
 
@@ -104,7 +109,22 @@ namespace DeadReckoned.Expressions.Internal
                 ParseExpression();
             }
 
-            return new Expression(m_ByteCode.ToArray(), m_Strings.ToArray());
+            Expression expr;
+            if (transient)
+            {
+                // In this case, the expression is expected to be evaluated immediately and discarded,
+                // so a direct view of the compiler's buffers are supplied to a thread static cached expression.
+                // This avoids a lot of allocations and copy overhead for throw-away expressions.
+                expr = _transientExpression ??= new Expression();
+                expr.ByteCode = m_ByteCode.AsMemory();
+                expr.Strings = m_Strings.AsMemory();
+            }
+            else
+            {
+                expr = new Expression(m_ByteCode.ToArray(), m_Strings.ToArray());
+            }
+
+            return expr;
         }
 
         #region Errors
@@ -152,6 +172,7 @@ namespace DeadReckoned.Expressions.Internal
 
         private void Advance()
         {
+            m_Previous2 = m_Previous;
             m_Previous = m_Current;
 
             while (true)
@@ -254,10 +275,7 @@ namespace DeadReckoned.Expressions.Internal
         private void Emit(OpCode code) => Emit((byte)code);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Emit(byte value)
-        {
-            m_ByteCode.Add(value);
-        }
+        private void Emit(byte value) => m_ByteCode.Add(value);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Emit(short value)
@@ -376,7 +394,7 @@ namespace DeadReckoned.Expressions.Internal
             int jump = m_ByteCode.Count - offset - sizeof(ushort);
             if (jump > ushort.MaxValue)
             {
-                ErrorAtCurrent($"Exceeded maxumum jump size: {jump}, max={ushort.MaxValue}");
+                ErrorAtCurrent($"Exceeded maximum jump size: {jump}, max={ushort.MaxValue}");
                 return;
             }
 
@@ -410,6 +428,7 @@ namespace DeadReckoned.Expressions.Internal
         private void ParseExpression()
         {
             ParsePrecedence(Precedence.Or);
+            ErrorIfOrphaned();
         }
 
         private void ParseGrouping()
@@ -420,11 +439,18 @@ namespace DeadReckoned.Expressions.Internal
             Consume(TokenType.RightParen, "Expected ')' after expression");
 
             DecrementDepth();
-            ErrorIfOrphaned();
         }
 
         private void ParseCall()
         {
+            // Currently, only functions can be called, and a function name is always
+            // an identifier. So ensure that an identifier preceded.
+            if (m_Previous2.Type != TokenType.Identifier)
+            {
+                ErrorAt(in m_Previous2, "Expected function name");
+                return;
+            }
+
             int argCount = 0;
             if (!Check(TokenType.RightParen))
             {
@@ -519,7 +545,7 @@ namespace DeadReckoned.Expressions.Internal
 
             // If followed by a '(', this is a function call
             // Functions must be known at compile time, so it is an error if it doesn't exist
-            if (Match(TokenType.LeftParen))
+            if (Check(TokenType.LeftParen))
             {
                 if (!m_Engine.TryGetFunction(name, out FunctionInfo fn))
                 {
@@ -527,18 +553,16 @@ namespace DeadReckoned.Expressions.Internal
                     return;
                 }
 
-                ParseCall();
-                Emit(fn.Id);
+                EmitConst(fn.Id);
                 return;
             }
 
-            Error($"Invalid token '{name}'");
+            // Currently, lone identifiers do nothing, so this is a syntax error
+            Error($"Invalid identifier '{name}'");
         }
 
         private void ParseInteger()
         {
-            ErrorIfOrphaned();
-
             // Integers are always parsed as decimal types in decimal numeric mode
             if (m_Engine.m_Config.NumericMode == NumericMode.Decimal)
             {
@@ -558,8 +582,6 @@ namespace DeadReckoned.Expressions.Internal
         
         private void ParseDecimal32()
         {
-            ErrorIfOrphaned();
-
             ReadOnlySpan<char> span = m_Previous.Slice(m_Source);
             if (float.TryParse(span, out float value))
             {
@@ -580,8 +602,6 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseDecimal64()
         {
-            ErrorIfOrphaned();
-
             ReadOnlySpan<char> span = m_Previous.Slice(m_Source);
             if (double.TryParse(span, out double value))
             {
@@ -602,8 +622,6 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseString()
         {
-            ErrorIfOrphaned();
-
             ref Token token = ref m_Previous;
             ReadOnlySpan<char> span = m_Source.Slice(token.Start + 1, token.Length - 2).Span;
 
@@ -658,8 +676,6 @@ namespace DeadReckoned.Expressions.Internal
 
         private void ParseLiteral()
         {
-            ErrorIfOrphaned();
-
             switch (m_Previous.Type)
             {
                 case TokenType.False:   /**/ Emit(OpCode.LdFalse); break;
@@ -690,9 +706,13 @@ namespace DeadReckoned.Expressions.Internal
             PatchJump(endJump);
         }
 
-
         private int GetOrAddString(in Token token, out string value)
         {
+            // TODO: The allocations for strings here bothers me. There should be a way around it using
+            //       ReadOnlyMemory<char> as views into the source, but requires a specialized dictionary
+            //       that can handle string views as keys and compare them for content equality, becuse
+            //       they are used lookups for parameters at evaluation time.
+
             value = token.ToString(m_Source.Span);
             return GetOrAddString(value);
         }

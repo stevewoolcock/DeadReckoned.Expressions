@@ -51,7 +51,7 @@ namespace DeadReckoned.Expressions
             m_Compiler ??= new Compiler();
             try
             {
-                Expression expr = m_Compiler.Compile(this, source);
+                Expression expr = m_Compiler.Compile(this, source, transient: false);
                 return new CompileResult(expr);
             }
             catch (Exception ex)
@@ -63,12 +63,17 @@ namespace DeadReckoned.Expressions
             }
         }
 
-        public EvaluateResult Evaluate(string expression, ExpressionContext context = null, bool throwOnFailure = true)
+        public EvaluateResult Evaluate(string source, ExpressionContext context = null, bool throwOnFailure = true) => Evaluate(source.AsMemory(), context, throwOnFailure);
+
+        public EvaluateResult Evaluate(string source, int start, int length, ExpressionContext context = null, bool throwOnFailure = true) => Evaluate(source.AsMemory(start, length), context, throwOnFailure);
+
+        public EvaluateResult Evaluate(ReadOnlyMemory<char> source, ExpressionContext context = null, bool throwOnFailure = true)
         {
-            Expression expr;
+            m_Compiler ??= new Compiler();
             try
             {
-                expr = Compile(expression, true);
+                Expression expr = m_Compiler.Compile(this, source, transient: true);
+                return Evaluate(expr, context, throwOnFailure);
             }
             catch (Exception ex)
             {
@@ -77,26 +82,6 @@ namespace DeadReckoned.Expressions
 
                 return new EvaluateResult(ex);
             }
-
-            return Evaluate(expr, context, throwOnFailure);
-        }
-
-        public EvaluateResult Evaluate(ReadOnlyMemory<char> expression, ExpressionContext context = null, bool throwOnFailure = true)
-        {
-            Expression expr;
-            try
-            {
-                expr = Compile(expression, throwOnFailure);
-            }
-            catch (Exception ex)
-            {
-                if (throwOnFailure)
-                    throw;
-
-                return new EvaluateResult(ex);
-            }
-
-            return Evaluate(expr, context, throwOnFailure);
         }
 
         public EvaluateResult Evaluate(Expression expression, ExpressionContext context = null, bool throwOnFailure = true)

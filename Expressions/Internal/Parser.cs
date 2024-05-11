@@ -17,8 +17,13 @@ namespace DeadReckoned.Expressions.Internal
         private int m_Current;
         private string m_Error;
 
-        public string Error => m_Error;
+        #region Properties
+
         public int Column => m_Current;
+
+        public string Error => m_Error;
+
+        #endregion
 
         public void Init(ReadOnlyMemory<char> source)
         {
@@ -173,12 +178,6 @@ namespace DeadReckoned.Expressions.Internal
 
         private Token MakeNumber()
         {
-            /*if (Peek() == '0' && Peek(1) == 'x')
-            {
-                // Possible hexadecimal value
-                Advance(); // Consume 'x'
-            }*/
-
             while (char.IsDigit(Peek()))
             {
                 Advance();

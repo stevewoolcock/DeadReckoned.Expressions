@@ -82,7 +82,7 @@ namespace DeadReckoned.Expressions.Internal
 
         internal Value Evaluate(ExpressionEngine engine, Expression expr, ExpressionContext context)
         {
-            if (expr.m_ByteCode.Length == 0)
+            if (expr.ByteCode.IsEmpty)
                 return Value.Null;
 
             InitializeStack(engine.m_Config);
@@ -197,10 +197,10 @@ namespace DeadReckoned.Expressions.Internal
             }
 
             FastStack<Value> stack = m_Stack;
-            fixed (byte* code = expr.m_ByteCode)
+            fixed (byte* code = expr.ByteCode.Span)
             {
                 byte* ip = code;
-                byte* end = code + expr.m_ByteCode.Length;
+                byte* end = code + expr.ByteCode.Length;
                 while (ip < end)
                 {
                     OpCode opCode = *(OpCode*)ip++;
@@ -398,7 +398,7 @@ namespace DeadReckoned.Expressions.Internal
                         case OpCode.LdParam:
                             {
                                 var index = ReadI32(ref ip);
-                                var name = expr.m_Strings[index];
+                                var name = expr.Strings.Span[index];
 
                                 // Context takes precedence (local)
                                 // Followed by engine (global)
@@ -438,20 +438,22 @@ namespace DeadReckoned.Expressions.Internal
                         case OpCode.Call:
                             {
                                 var argCount = ReadI8(ref ip);
-                                var funcId = ReadI32(ref ip); 
-                                if (!engine.TryGetFunction(funcId, out FunctionInfo funcInfo))
+
+                                // Function id is on the stack, in the slot immediately preceding the arguments
+                                ref readonly Value funcId = ref stack.Peek(argCount + 1);
+                                if (!engine.TryGetFunction((int)funcId.m_Integer, out FunctionInfo funcInfo))
                                 {
                                     throw new ExpressionRuntimeException($"Function not defined");
                                 }
 
-                                // Arguments are already on the stack, a read-only view is passed to the function
+                                // Arguments are on the stack, a read-only view is passed to the function
                                 // The stack will not be modified while the function is executing
                                 ReadOnlyMemory<Value> args = stack.PeekMemory(argCount);
                                 FunctionCall call = new(engine, expr, context, args);
                                 Value v = funcInfo.Function(call);
 
-                                // Arguments are discarded and function return value pushed onto the stack
-                                stack.Discard(argCount);
+                                // Arguments and function id are discarded and function return value pushed onto the stack
+                                stack.Discard(argCount + 1);
                                 stack.Push(v);
                             }
                             break;

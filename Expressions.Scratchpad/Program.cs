@@ -42,28 +42,55 @@ namespace DeadReckoned.Expressions
             //string exprSource = "IF(MUL(1, 2) = 2, true, SUM(2, 2) = 4)";
             string exprSource = "12 + (56 / 0.5) * 5 + (100 * 0.25)";
 
+            // Transient
             try
             {
                 // Warm up
                 for (int i = 0; i < 4; i++)
                 {
-                    (Expression expr, TimeSpan compTime) = Compile(engine, exprSource);
-                    (Value result, TimeSpan evalTime) = Evaluate(engine, expr, context);
+                    Evaluate(engine, exprSource, context);
                 }
 
-                {
-                    (Expression expr, TimeSpan compTime) = Compile(engine, exprSource);
-                    (Value result, TimeSpan evalTime) = Evaluate(engine, expr, context);
+                (Value result, TimeSpan evalTime) = Evaluate(engine, exprSource, context);
 
-                    Console.WriteLine($"Compiled in {compTime.TotalMilliseconds:0.0000}ms");
-                    Console.WriteLine($"Evaluated in {evalTime.TotalMilliseconds:0.0000}ms");
-                    Console.WriteLine($"{result.Type} -> {result}");
-                }
+                Console.WriteLine($"Transient");
+                Console.WriteLine($"---------");
+                Console.WriteLine($"Compiled + evaluated in {evalTime.TotalMilliseconds:0.0000}ms");
+                Console.WriteLine($"{result.Type} -> {result}");
+                Console.WriteLine();
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
                 Console.WriteLine(ex.StackTrace);
+                return;
+            }
+
+            // Pre-compiled
+            try
+            {
+                // Warm up
+                for (int i = 0; i < 4; i++)
+                {
+                    (Expression e, _) = Compile(engine, exprSource);
+                    Evaluate(engine, e, context);
+                }
+
+                (Expression expr, TimeSpan compTime) = Compile(engine, exprSource);
+                (Value result, TimeSpan evalTime) = Evaluate(engine, expr, context);
+
+                Console.WriteLine($"Pre-compiled");
+                Console.WriteLine($"------------");
+                Console.WriteLine($"Compiled in {compTime.TotalMilliseconds:0.0000}ms");
+                Console.WriteLine($"Evaluated in {evalTime.TotalMilliseconds:0.0000}ms");
+                Console.WriteLine($"{result.Type} -> {result}");
+                Console.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
+                return;
             }
         }
 
@@ -82,6 +109,16 @@ namespace DeadReckoned.Expressions
             var sw = Stopwatch.StartNew();
 
             Value result = engine.Evaluate(expr, ctx);
+
+            sw.Stop();
+            return (result, sw.Elapsed);
+        }
+
+        static (Value result, TimeSpan time) Evaluate(ExpressionEngine engine, string source, ExpressionContext ctx)
+        {
+            var sw = Stopwatch.StartNew();
+
+            Value result = engine.Evaluate(source, ctx);
 
             sw.Stop();
             return (result, sw.Elapsed);

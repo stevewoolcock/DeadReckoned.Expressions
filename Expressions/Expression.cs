@@ -5,29 +5,28 @@ namespace DeadReckoned.Expressions
     /// <summary>
     /// A compiled expression.
     /// </summary>
-    public unsafe partial class Expression
+    public partial class Expression
     {
-        internal readonly byte[] m_ByteCode;
-        internal readonly string[] m_Strings;
-
         #region Properties
 
         /// <summary>
         /// The expression's bytecode sequence.
         /// </summary>
-        public ReadOnlyMemory<byte> ByteCode => m_ByteCode;
+        public ReadOnlyMemory<byte> ByteCode { get; internal set; }
 
         /// <summary>
         /// The string constants used by the expression.
         /// </summary>
-        public ReadOnlyMemory<string> Strings => m_Strings;
+        public ReadOnlyMemory<string> Strings { get; internal set; }
 
         #endregion
 
-        internal Expression(byte[] byteCode, string[] strings)
+        internal Expression() { }
+
+        public Expression(ReadOnlyMemory<byte> byteCode, ReadOnlyMemory<string> strings)
         {
-            m_ByteCode = byteCode;
-            m_Strings = strings;
+            ByteCode = byteCode;
+            Strings = strings;
         }
     }
 }
